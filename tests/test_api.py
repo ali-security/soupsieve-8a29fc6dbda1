@@ -590,6 +590,76 @@ class TestInvalid(util.TestCase):
         with self.assertRaises(TypeError):
             sv.filter('div', "not a tag", flags=flags)
 
+    def test_excessive_selectors(self):
+        """Test excessive selectors."""
+
+        # Build a 500 KB selector string: "a,a,a,...,a" (250,000 items)
+        count = 10000
+        selector = ",".join("a" for _ in range(count))
+
+        # Compile the selector
+        with self.assertRaises(ValueError):
+            sv.compile(selector)
+
+    def test_excessive_custom_selectors(self):
+        """Test excessive custom selectors."""
+
+        # Build a 500 KB selector string: "a,a,a,...,a" (250,000 items)
+        count = 10000
+        selector = ",".join("a" for _ in range(count))
+
+        # Compile the selector
+        with self.assertRaises(ValueError):
+            sv.compile('div:--custom', custom={':--custom': selector})
+
+    def test_excessive_custom_and_normal_selectors(self):
+        """Test excessive custom and normal selectors."""
+
+        count = 5000
+        selector = ",".join("a" for _ in range(count))
+
+        # Compile the selector
+        with self.assertRaises(ValueError):
+            sv.compile(':is({}):--custom'.format(selector), custom={':--custom': selector})
+
+    def test_excessive_nested_custom_selectors(self):
+        """Test excessive selectors created by nesting custom selectors."""
+
+        # Each custom selector is small on its own, but referencing one many times
+        # from another expands it far beyond the limit.
+        count = 100
+        custom = {
+            ':--inner': ",".join("a" for _ in range(count)),
+            ':--outer': "".join(":--inner" for _ in range(count))
+        }
+
+        with self.assertRaises(ValueError):
+            sv.compile('div:--outer', custom=custom)
+
+    def test_excessive_builtin_pseudo_class_selectors(self):
+        """Test excessive selectors created by expanding built-in pseudo-classes."""
+
+        # Only a small number of tokens, but each `:read-write` expands to a large selector list.
+        count = 1000
+        selector = 'input' + ''.join(':read-write' for _ in range(count))
+
+        with self.assertRaises(ValueError):
+            sv.compile(selector)
+
+    def test_selectors_within_limit(self):
+        """Test that selectors within the limit still compile and match."""
+
+        count = 1000
+        selector = ",".join("a" for _ in range(count))
+        markup = '<div><a href="#">link</a><span>text</span></div>'
+        soup = self.soup(markup, 'html.parser')
+
+        self.assertEqual(len(sv.select(selector, soup)), 1)
+        self.assertEqual(
+            len(sv.compile('a:--custom', custom={':--custom': selector}).select(soup)),
+            1
+        )
+
 
 class TestSyntaxErrorReporting(util.TestCase):
     """Test reporting of syntax errors."""
